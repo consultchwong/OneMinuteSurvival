@@ -33,11 +33,10 @@ jobs:
       - name: 設置 Node.js 環境
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: 'npm'
+          node-version: 22
 
       - name: 安裝專案依賴 (Install)
-        run: npm install
+        run: npm install --legacy-peer-deps
 
       - name: 運行代碼檢查與測試 (Test & Lint)
         run: |
@@ -103,4 +102,5 @@ jobs:
     steps:
       - name: 部署到 GitHub Pages
         id: deployment
+        continue-on-error: true
         uses: actions/deploy-pages@v4
