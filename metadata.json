@@ -1,0 +1,6 @@
+{
+  "name": "單手求生：1分鐘倖存者",
+  "description": "極致割草微型倖存者手遊！單手拖拽走位、全自動狂轟亂炸、撐過60秒極限通關。爽快升級三選一與全屏清怪復活！",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
