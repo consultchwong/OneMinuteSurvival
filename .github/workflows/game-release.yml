@@ -1,0 +1,106 @@
+name: Build Game Release & Deploy
+
+on:
+  push:
+    branches: [main, master]
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: '建立 GitHub Release 標籤發布？'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: 'pages'
+  cancel-in-progress: false
+
+jobs:
+  build-and-package:
+    name: 🎮 編譯遊戲並打包 ZIP
+    runs-on: ubuntu-latest
+    steps:
+      - name: 檢出代碼 (Checkout)
+        uses: actions/checkout@v4
+
+      - name: 設置 Node.js 環境
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: 安裝專案依賴 (Install)
+        run: npm install
+
+      - name: 運行代碼檢查與測試 (Test & Lint)
+        run: |
+          npm run lint
+          npx tsx --test src/game/rules.test.ts
+
+      - name: 編譯純前端靜態包 (Build)
+        run: npm run build
+
+      - name: 打包平台專用 ZIP (Package ZIP)
+        run: |
+          python3 -c "import zipfile, os; z = zipfile.ZipFile('game-portal-release.zip', 'w', zipfile.ZIP_DEFLATED); [z.write(os.path.join(root, f), os.path.relpath(os.path.join(root, f), 'dist')) for root, _, files in os.walk('dist') for f in files]; z.close()"
+          echo "ZIP 檔案大小："
+          ls -lh game-portal-release.zip
+
+      - name: 📤 上傳 Artifact 供直接下載 (Upload ZIP)
+        uses: actions/upload-artifact@v4
+        with:
+          name: game-portal-release
+          path: game-portal-release.zip
+          retention-days: 30
+
+      - name: 🏷️ 自動建立 GitHub Release (如有 Tag 或手動勾選)
+        if: startsWith(github.ref, 'refs/tags/') || inputs.create_release == true
+        uses: softprops/action-gh-release@v2
+        with:
+          files: game-portal-release.zip
+          tag_name: ${{ github.ref_name || 'latest-release' }}
+          name: 《單手求生：1分鐘倖存者》最新遊戲發布包
+          body: |
+            ## 🎮 遊戲發布包 (Game Release Package)
+            - **適用平台**：CrazyGames / GamePix / Y8 / itch.io
+            - **內容物**：自包含 HTML5 Canvas + Web Audio 純靜態遊戲
+            - **下載方式**：直接點擊下方 `game-portal-release.zip` 下載後即可上傳至各大遊戲平台。
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ----------------------------------------------------------------------
+      # 可選：若在 GitHub Repo Secrets 設定了 CRAZYGAMES_TOKEN，自動推送到 CrazyGames
+      # ----------------------------------------------------------------------
+      - name: 🚀 自動部署到 CrazyGames (若已配置 Token)
+        if: env.CRAZYGAMES_TOKEN != ''
+        run: |
+          npx @crazygames/sdk-cli@latest build:upload --token "${{ secrets.CRAZYGAMES_TOKEN }}" --zip game-portal-release.zip
+        env:
+          CRAZYGAMES_TOKEN: ${{ secrets.CRAZYGAMES_TOKEN }}
+
+      # 準備 GitHub Pages 靜態文件
+      - name: 準備 GitHub Pages 產出物
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: 'dist'
+
+  deploy-pages:
+    name: 🌐 部署免費線上試玩版 (GitHub Pages)
+    needs: build-and-package
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: 部署到 GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
